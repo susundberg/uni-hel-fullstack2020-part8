@@ -1,88 +1,11 @@
-const { ApolloServer, gql } = require('apollo-server')
-
-const { v1: uuid } = require('uuid')
+const { ApolloServer, gql, UserInputError, AuthenticationError } = require('apollo-server')
 
 
+const models = require('./models')
+const database = require('./database')
+const jwt = require('jsonwebtoken')
+const config = require('./config')
 
-let authors = [
-    {
-        name: 'Robert Martin',
-        id: "afa51ab0-344d-11e9-a414-719c6709cf3e",
-        born: 1952,
-    },
-    {
-        name: 'Martin Fowler',
-        id: "afa5b6f0-344d-11e9-a414-719c6709cf3e",
-        born: 1963
-    },
-    {
-        name: 'Fyodor Dostoevsky',
-        id: "afa5b6f1-344d-11e9-a414-719c6709cf3e",
-        born: 1821
-    },
-    {
-        name: 'Joshua Kerievsky', // birthyear not known
-        id: "afa5b6f2-344d-11e9-a414-719c6709cf3e",
-    },
-    {
-        name: 'Sandi Metz', // birthyear not known
-        id: "afa5b6f3-344d-11e9-a414-719c6709cf3e",
-    },
-]
-
-
-
-let books = [
-    {
-        title: 'Clean Code',
-        published: 2008,
-        author: 'Robert Martin',
-        id: "afa5b6f4-344d-11e9-a414-719c6709cf3e",
-        genres: ['refactoring']
-    },
-    {
-        title: 'Agile software development',
-        published: 2002,
-        author: 'Robert Martin',
-        id: "afa5b6f5-344d-11e9-a414-719c6709cf3e",
-        genres: ['agile', 'patterns', 'design']
-    },
-    {
-        title: 'Refactoring, edition 2',
-        published: 2018,
-        author: 'Martin Fowler',
-        id: "afa5de00-344d-11e9-a414-719c6709cf3e",
-        genres: ['refactoring']
-    },
-    {
-        title: 'Refactoring to patterns',
-        published: 2008,
-        author: 'Joshua Kerievsky',
-        id: "afa5de01-344d-11e9-a414-719c6709cf3e",
-        genres: ['refactoring', 'patterns']
-    },
-    {
-        title: 'Practical Object-Oriented Design, An Agile Primer Using Ruby',
-        published: 2012,
-        author: 'Sandi Metz',
-        id: "afa5de02-344d-11e9-a414-719c6709cf3e",
-        genres: ['refactoring', 'design']
-    },
-    {
-        title: 'Crime and punishment',
-        published: 1866,
-        author: 'Fyodor Dostoevsky',
-        id: "afa5de03-344d-11e9-a414-719c6709cf3e",
-        genres: ['classic', 'crime']
-    },
-    {
-        title: 'The Demon ',
-        published: 1872,
-        author: 'Fyodor Dostoevsky',
-        id: "afa5de04-344d-11e9-a414-719c6709cf3e",
-        genres: ['classic', 'revolution']
-    },
-]
 
 const typeDefs = gql`
 type Author {
@@ -92,29 +15,37 @@ type Author {
     bookCount: Int
 }
 
+type User {
+    username: String!
+    favoriteGenre: String!
+    id: ID!
+  }
+
+
+type Token {
+    value: String!
+  }
 
 type Book {
-     title: String!
-     published: Int!
-     author: String!
-     id: ID!
-     genres: [String!]!
-}
-
+    title: String!
+    published: Int!
+    author: Author!
+    genres: [String!]!
+    id: ID!
+  }
 
 type Query {
     bookCount: Int!
     authorCount: Int!
     allBooks(author: String, genre: String): [Book!]!
     allAuthors: [Author!]!
+    me: User
   }
-
-
 
   type Mutation {
     addBook(
       title: String!
-      author: String
+      author: String!
       published: Int!
       genres: [String!]!
     ) : Book
@@ -122,67 +53,165 @@ type Query {
         name: String!
         setBornTo: Int
     ) : Author
+
+    createUser(
+        username: String!
+        favoriteGenre: String!
+      ): User
+      login(
+        username: String!
+        password: String!
+      ): Token
+
   }  
 `
-const resolvAllBooks = (root, args) => {
 
-    let ret = books
-    if (args.author)
-        ret = ret.filter((x) => (x.author === args.author))
-
-    if (args.genre)
-        ret = ret.filter((x) => (x.genres.includes(args.genre)))
-
-    return ret
-
-}
-const resolvers = {
-    Query: {
-        bookCount: () => books.length,
-        authorCount: () => authors.length,
-        allBooks: resolvAllBooks,
-        allAuthors: () => (authors),
-    },
-    Author: {
-        bookCount: (root) => books.filter((x) => (x.author == root.name)).length
-    },
-    Mutation: {
-        addBook: async (root, args) => {
-            const book = { ...args, id: uuid() }
-            books = books.concat(book)
+const mutationAddBook = async (root, args, context ) => {
 
 
-            let author = authors.find((x) => (args.author === x.name))
-            if (author) {
-                console.log('Author exists')
-                return book
-            }
-            console.log('Adding author', args.author)
-            author = { name: args.author, id : uuid(), born: null, bookCount: null }
-            authors = authors.concat(author)
-            return book
-        },
-        editAuthor: async (root, args) => {
-            let author = authors.find((x) => (x.name === args.name))
-            if (!author)
-                return null
+    const currentUser = context.currentUser
 
-            if (args.setBornTo)
-                author.born = args.setBornTo
-            console.log("Author updated", author )    
+    if (!currentUser) {
+      throw new AuthenticationError("not authenticated")
+    }
 
-            authors = authors.map((x) => (x.id !== author.id) ? x : author)
-            return author
+    let author = await models.Author.findOne({ name: args.author })
 
+    if (!author) {
+        console.log("Author not found, adding")
+
+        try {
+            author = await models.Author({ name: args.author }).save()
+        }
+        catch (error) {
+            throw new UserInputError(error.message, {
+                invalidArgs: args,
+            })
         }
     }
+
+    try {
+        const booksaved = await models.Book({ ...args, author: author._id })
+            .populate('author', { name: 1 })
+            .save()
+
+        console.log("Before pop", booksaved)
+        const book = await booksaved.execPopulate()
+        console.log("Got book", book)
+        return book
+    } catch (error) {
+        throw new UserInputError(error.message, {
+            invalidArgs: args,
+        })
+    }
+
 }
 
+const mutationEditAuthor = async (root, args, context ) => {
+
+
+    const currentUser = context.currentUser
+
+    if (!currentUser) {
+      throw new AuthenticationError("not authenticated")
+    }
+
+    let author = await models.Author.findOne({ name: args.name })
+    if (!author)
+        return null
+
+    if (args.setBornTo)
+        author.born = args.setBornTo
+    console.log("Author updated", author)
+
+    await author.save()
+    return author
+}
+
+const mutationCreateUser = async (root, args) => {
+
+    console.log("Create user:", args)
+    const user = new models.User(args)
+    return user.save()
+        .catch(error => {
+            throw new UserInputError(error.message, {
+                invalidArgs: args,
+            })
+        })
+}
+
+const mutationLogin = async (root, args) => {
+    const user = await models.User.findOne({ username: args.username })
+
+    if (!user || args.password !== 'secret') {
+        throw new UserInputError("wrong credentials")
+    }
+
+    const userForToken = {
+        username: user.username,
+        id: user._id,
+    }
+
+    return { value: jwt.sign(userForToken, config.TOKEN_SECRET) }
+}
+
+const resolvAllBooks = async (root, args) => {
+
+    let filters = {}
+
+    if (args.author) {
+        let author = await models.Author.findOne({ name: args.author })
+
+        if (!author)
+            return null
+
+        filters["author"] = author._id
+    }
+
+    if (args.genre)
+        filters["genres"] = args.genre
+
+    console.log("Find:", filters)
+    const res = await models.Book.find(filters).populate('author', { name: 1 })
+    console.log("Found:", res)
+    return res
+}
+
+const resolvers = {
+    Query: {
+        bookCount: () => models.Book.collection.countDocuments(),
+        authorCount: () => models.Author.collection.countDocuments(),
+        allBooks: resolvAllBooks,
+        allAuthors: () => models.Author.find(),
+        me: (root, args, context) => context.currentUser,
+    },
+    Author: {
+        bookCount: async (root) => models.Book.countDocuments({ author: root.id })
+    },
+    Mutation: {
+        addBook: mutationAddBook,
+        editAuthor: mutationEditAuthor,
+        createUser: mutationCreateUser,
+        login: mutationLogin,
+    }
+}
+const context = async ({ req }) => {
+    const auth = req ? req.headers.authorization : null
+    if (auth && auth.toLowerCase().startsWith('bearer ')) {
+        const decodedToken = jwt.verify(
+            auth.substring(7), config.TOKEN_SECRET
+        )
+        const currentUser = await User
+            .findById(decodedToken.id)
+        return { currentUser }
+    }
+}
 
 
 const server = new ApolloServer({
     typeDefs,
     resolvers,
+    context
 })
 
 server.listen().then(({ url }) => {
