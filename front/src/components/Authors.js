@@ -1,60 +1,11 @@
-  
-import React, { useState } from 'react'
 
-import { useQuery, useMutation } from '@apollo/client';
+import React from 'react'
 
-
-import queries from '../queries' 
+import { useQuery } from '@apollo/client';
 
 
+import queries from '../queries'
 
-const AuthorBorn = (props) => {
-  const [name, setName] = useState('')
-  const [born, setBorn] = useState('')
-
-   const [setBornMut] = useMutation(queries.AUTHOR_SET_BORN, {
-     refetchQueries: [{ query: queries.ALL_AUTHORS }, ]
-   })
-
-
-  const submit = async (event) => {
-    event.preventDefault()
-
-    const variables = { name,  born: Number(born) }
-    console.log('modify author...', variables)
-    setBornMut({ variables })
-
-
-    setName('')
-    setBorn('')
-  }
-
-
-  return (
-    <div>
-      <form onSubmit={submit}>
-        <div>
-          Name
-          <input
-            value={name}
-            onChange={({ target }) => setName(target.value)}
-          />
-        </div>
-
-        <div>
-          Born
-          <input
-            type='number'
-            value={born}
-            onChange={({ target }) => setBorn(target.value)}
-          />
-        </div>
-        
-        <button type='submit'>Modify</button>
-      </form>
-    </div>
-  )
-}
 
 
 const Authors = (props) => {
@@ -64,8 +15,8 @@ const Authors = (props) => {
   if (!props.show) {
     return null
   }
-  
-  if (result.loading)  {
+
+  if (result.loading) {
     return <div>loading...</div>
   }
 
@@ -98,8 +49,6 @@ const Authors = (props) => {
         </tbody>
       </table>
 
-      <h3> Modify author </h3>
-      <AuthorBorn/>
 
     </div>
   )

@@ -141,8 +141,12 @@ const mutationCreateUser = async (root, args) => {
 }
 
 const mutationLogin = async (root, args) => {
+    console.log("Login as",  args )
+
     const user = await models.User.findOne({ username: args.username })
 
+    console.log("User as", user )
+    
     if (!user || args.password !== 'secret') {
         throw new UserInputError("wrong credentials")
     }
@@ -201,8 +205,7 @@ const context = async ({ req }) => {
         const decodedToken = jwt.verify(
             auth.substring(7), config.TOKEN_SECRET
         )
-        const currentUser = await User
-            .findById(decodedToken.id)
+        const currentUser = await models.User.findById(decodedToken.id)
         return { currentUser }
     }
 }
