@@ -11,9 +11,8 @@ query {
 }
 `
 
-const ALL_BOOKS = gql`
-query {
-  allBooks  {
+const BOOK_DETAILS = gql`
+  fragment BookDetails on Book {
     title
     author {
       name
@@ -21,7 +20,17 @@ query {
     published
     genres
   }
+  
+`
+
+
+const ALL_BOOKS = gql`
+query {
+  allBooks  {
+    ...BookDetails
+  }
 }
+${BOOK_DETAILS}
 `
 
 
@@ -62,6 +71,16 @@ mutation createBook($title: String!, $author: String!, $published: Int!, $genres
 }
 `
 
+
+const BOOK_ADDED = gql`
+subscription {
+  bookAdded { title }
+}
+`
+
+console.log("BOOK_ADDED", BOOK_ADDED )
+
+
 const AUTHOR_SET_BORN = gql`
 mutation setBorn($name: String!, $born: Int!) {
     editAuthor(
@@ -83,4 +102,4 @@ const LOGIN = gql`
 `
 
 
-export default { ALL_AUTHORS, ALL_BOOKS, CREATE_BOOK, AUTHOR_SET_BORN, LOGIN, GENRE_BOOKS , ME }
+export default { ALL_AUTHORS, ALL_BOOKS, CREATE_BOOK, AUTHOR_SET_BORN, LOGIN, GENRE_BOOKS, BOOK_ADDED, ME }

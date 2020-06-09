@@ -6,6 +6,7 @@ import queries from '../queries'
 
 const Books = (props) => {
 
+
   const result = useQuery(queries.ALL_BOOKS)
   const [filter, setFilter] = useState(null)
 
@@ -64,7 +65,7 @@ const Books = (props) => {
 
      <div>
        <h3>Filter by genre</h3>
-      { genres.map( x => <button onClick={ () => setFilter(x) }> {x} </button> ) }
+      { genres.map( x => <button key={x} onClick={ () => setFilter(x) }> {x} </button> ) }
        <button onClick={ () => setFilter(null)}> all genres </button>
        </div>
     </div>

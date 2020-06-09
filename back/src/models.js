@@ -14,7 +14,7 @@ const schemaBook = new mongoose.Schema({
     author: {
         type: mongoose.Schema.Types.ObjectId,
         required: true,
-        ref: 'Author'
+        ref: 'Author',
     },
     genres: [
         { type: String }
@@ -45,6 +45,11 @@ const schemaAuthor = new mongoose.Schema({
     born: {
         type: Number,
     },
+    bookCount : {
+        type: Number,
+        required: true,
+        default: 0,
+    }
 })
 
 module.exports = {

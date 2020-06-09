@@ -1,4 +1,4 @@
-const { ApolloServer, gql, UserInputError, AuthenticationError } = require('apollo-server')
+const { ApolloServer, gql, UserInputError, AuthenticationError, PubSub } = require('apollo-server')
 
 
 const models = require('./models')
@@ -6,6 +6,7 @@ const database = require('./database')
 const jwt = require('jsonwebtoken')
 const config = require('./config')
 
+const BOOK_ADDED_CHANNEL = "BOOK_ADDED"
 
 const typeDefs = gql`
 type Author {
@@ -63,16 +64,21 @@ type Query {
         password: String!
       ): Token
 
-  }  
+  }
+  
+  type Subscription {
+    bookAdded: Book!
+  }   
 `
+const pubsub = new PubSub()
 
-const mutationAddBook = async (root, args, context ) => {
+const mutationAddBook = async (root, args, context) => {
 
 
     const currentUser = context.currentUser
 
     if (!currentUser) {
-      throw new AuthenticationError("not authenticated")
+        throw new AuthenticationError("not authenticated")
     }
 
     let author = await models.Author.findOne({ name: args.author })
@@ -81,13 +87,20 @@ const mutationAddBook = async (root, args, context ) => {
         console.log("Author not found, adding")
 
         try {
-            author = await models.Author({ name: args.author }).save()
+            author = await models.Author({ name: args.author, bookCount : 1 }).save()
         }
         catch (error) {
             throw new UserInputError(error.message, {
                 invalidArgs: args,
             })
         }
+    }
+    else
+    {
+        console.log("Author found, updating", author )
+        author.bookCount += 1
+        author = await author.save()
+        console.log("Author updated:", author )
     }
 
     try {
@@ -97,7 +110,10 @@ const mutationAddBook = async (root, args, context ) => {
 
         console.log("Before pop", booksaved)
         const book = await booksaved.execPopulate()
-        console.log("Got book", book)
+        console.log("GOT NEW BOOK", book)
+
+        pubsub.publish(BOOK_ADDED_CHANNEL, { bookAdded: book })
+
         return book
     } catch (error) {
         throw new UserInputError(error.message, {
@@ -107,13 +123,13 @@ const mutationAddBook = async (root, args, context ) => {
 
 }
 
-const mutationEditAuthor = async (root, args, context ) => {
+const mutationEditAuthor = async (root, args, context) => {
 
 
     const currentUser = context.currentUser
 
     if (!currentUser) {
-      throw new AuthenticationError("not authenticated")
+        throw new AuthenticationError("not authenticated")
     }
 
     let author = await models.Author.findOne({ name: args.name })
@@ -141,12 +157,12 @@ const mutationCreateUser = async (root, args) => {
 }
 
 const mutationLogin = async (root, args) => {
-    console.log("Login as",  args )
+    console.log("Login as", args)
 
     const user = await models.User.findOne({ username: args.username })
 
-    console.log("User as", user )
-    
+    console.log("User as", user)
+
     if (!user || args.password !== 'secret') {
         throw new UserInputError("wrong credentials")
     }
@@ -177,7 +193,7 @@ const resolvAllBooks = async (root, args) => {
 
     console.log("Find:", filters)
     const res = await models.Book.find(filters).populate('author', { name: 1 })
-    console.log("Found:", res)
+    // console.log("Found:", res)
     return res
 }
 
@@ -190,16 +206,28 @@ const resolvers = {
         me: (root, args, context) => context.currentUser,
     },
     Author: {
-        bookCount: async (root) => models.Book.countDocuments({ author: root.id })
+        bookCount: async (root) => root.bookCount ? root.bookCount : 0  
     },
     Mutation: {
         addBook: mutationAddBook,
         editAuthor: mutationEditAuthor,
         createUser: mutationCreateUser,
         login: mutationLogin,
-    }
+    },
+    Subscription: {
+        bookAdded: {
+            subscribe: () => {
+                console.log("Someone SUBSCRIBED!")
+                return pubsub.asyncIterator([BOOK_ADDED_CHANNEL])
+            }
+        },
+    },
 }
 const context = async ({ req }) => {
+
+    // console.log("QUERY:", req);
+
+
     const auth = req ? req.headers.authorization : null
     if (auth && auth.toLowerCase().startsWith('bearer ')) {
         const decodedToken = jwt.verify(
@@ -208,15 +236,19 @@ const context = async ({ req }) => {
         const currentUser = await models.User.findById(decodedToken.id)
         return { currentUser }
     }
+
 }
 
-
+  
 const server = new ApolloServer({
     typeDefs,
     resolvers,
-    context
+    context,
+    // extensions: [() => new BasicLogging()]
 })
 
-server.listen().then(({ url }) => {
+server.listen().then(({ url, subscriptionsUrl }) => {
     console.log(`Server ready at ${url}`)
+    console.log(`Subscriptions ready at ${subscriptionsUrl}`)
+
 })

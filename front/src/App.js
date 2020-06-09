@@ -6,14 +6,26 @@ import Books from './components/Books'
 import NewBook from './components/NewBook'
 import Login from './components/Login'
 import Recommended from './components/Recommended'
-import { useApolloClient } from '@apollo/client'
+import { useApolloClient, useSubscription } from '@apollo/client'
 
-
+import queries from './queries'
 
 const App = () => {
   const [page, setPage] = useState('authors')
   const [token, setToken] = useState(null)
   const client = useApolloClient()
+
+
+
+  console.log("SUBSCRIBE TO", queries.BOOK_ADDED )
+  useSubscription( queries.BOOK_ADDED, {
+    onSubscriptionData: ({ subscriptionData }) => {
+      console.log("Got Added:", subscriptionData )
+      client.resetStore() // Lets just flush the whole cache, also the authors book count will be messed.
+    }
+  })
+
+
 
   const onLogout = () => {
     console.log("Logout asked!")

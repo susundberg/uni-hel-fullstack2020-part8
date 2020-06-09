@@ -13,7 +13,7 @@ const NewBook = (props) => {
 
   const [createBook] = useMutation(queries.CREATE_BOOK, {
     refetchQueries: [{ query: queries.ALL_AUTHORS }, { query: queries.ALL_BOOKS },
-                      "getBookswithGenre", // WHen passing string, it uses the existing variables.
+                      "getBookswithGenre", // When passing string, it uses the existing variables.
                     ]
   })
 
